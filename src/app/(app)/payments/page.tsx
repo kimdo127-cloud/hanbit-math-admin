@@ -221,6 +221,7 @@ function PayPanel() {
                 <Td className="tabular">
                   {won(r.paidAmount ?? r.amount)}
                   {r.discount && <span className="ml-1.5 text-[12px] text-brand">형제 할인</span>}
+                  {r.partial && <span className="ml-1.5 text-[12px] text-brand">첫 달 {r.partial.count}/{r.partial.total}회분</span>}
                 </Td>
                 <Td>
                   {r.status === "paid" ? <Badge tone="success">납부</Badge> : r.status === "upcoming" ? <Badge>청구 전</Badge> : <Badge tone="danger">미납</Badge>}
@@ -240,7 +241,7 @@ function PayPanel() {
               </tr>
             ))}
           </Table>
-          <p className="mt-3 text-[12px] text-grey-500">형제는 나이순 둘째부터 10% 할인된 금액이에요.</p>
+          <p className="mt-3 text-[12px] text-grey-500">형제는 나이순 둘째부터 10% 할인돼요. 달 중간에 시작하면 첫 달은 남은 수업 수만큼만 청구해요 (회차 기준).</p>
         </>
       )}
 

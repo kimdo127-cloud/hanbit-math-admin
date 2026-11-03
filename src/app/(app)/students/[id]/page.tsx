@@ -283,6 +283,7 @@ export default function StudentDetailPage() {
               <Td className="tabular">
                 {won(p.paidAmount ?? p.amount)}
                 {p.discount && <span className="ml-1.5 text-[12px] text-brand">형제 할인</span>}
+                  {p.partial && <span className="ml-1.5 text-[12px] text-brand">첫 달 {p.partial.count}/{p.partial.total}회분</span>}
               </Td>
               <Td>{p.status === "paid" ? <Badge tone="success">납부</Badge> : p.status === "upcoming" ? <Badge>청구 전</Badge> : <Badge tone="danger">미납</Badge>}</Td>
               <Td className="tabular text-grey-500">{p.paidAt ? fmtDate(p.paidAt) : "-"}</Td>

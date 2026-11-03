@@ -107,6 +107,7 @@ export default function DashboardPage() {
                 <span className="tabular text-[15px] font-bold">
                   {won(p.amount)}
                   {p.discount && <span className="ml-1.5 text-[12px] font-medium text-brand">형제 할인</span>}
+                  {p.partial && <span className="ml-1.5 text-[12px] font-medium text-brand">첫 달 {p.partial.count}/{p.partial.total}회분</span>}
                 </span>
               </li>
             ))}
