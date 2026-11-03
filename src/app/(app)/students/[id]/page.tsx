@@ -223,7 +223,7 @@ export default function StudentDetailPage() {
                     size="s"
                     onClick={() => {
                       setEnding({ id: e.id, name: e.className });
-                      setEndDate(today());
+                      setEndDate(e.start_date > today() ? e.start_date : today());
                     }}
                   >
                     수강 중단
@@ -326,7 +326,7 @@ export default function StudentDetailPage() {
         <p className="mb-4 text-[14px] text-grey-700">
           <b>{ending?.name}</b> 수강을 중단해요. 기록은 지우지 않고 중단일만 남기고, 환불 계산의 기준이 돼요.
         </p>
-        <TextField label="수강 중단일" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        <TextField label="수강 중단일 (이날부터 수업 없음)" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         <div className="mt-6 flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={() => setEnding(null)}>
             취소
