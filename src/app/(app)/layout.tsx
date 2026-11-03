@@ -5,8 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader } from "@/components/ui";
 import { GROUPS, MENU } from "@/lib/menu";
-import { canSee, currentStaff, logout, ROLE_LABEL, type StaffPublic } from "@/lib/api";
-import { resetDB } from "@/lib/store";
+import { canSee, currentStaff, logout, refreshMe, resetDemo, ROLE_LABEL, type StaffPublic } from "@/lib/api";
 
 
 
@@ -20,6 +19,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!s) router.replace("/login");
     else setMe(s);
   }, [router, pathname]);
+  // 권한 등급이 바뀌었을 수 있으니 들어올 때 서버에서 내 정보를 한 번 다시 받는다
+  useEffect(() => {
+    refreshMe()
+      .then((s) => (s ? setMe(s) : router.replace("/login")))
+      .catch(() => {});
+  }, [router]);
 
 
 
@@ -78,14 +83,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             비밀번호 변경
           </Link>
           <button
-            onClick={() => {
-              resetDB();
-              logout();
+            onClick={async () => {
+              await resetDemo().catch(() => {});
               router.replace("/login");
             }}
             className="block text-[11px] text-grey-400"
           >
-            (목업) 데이터 초기화
+            (시연) 데이터 초기화
           </button>
         </div>
       </aside>

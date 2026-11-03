@@ -4,7 +4,7 @@
 import { ChevronRight, Mail, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Dialog, Drawer, Loader, PageHeader, SearchInput, Select, Table, Td, TextField, Toast } from "@/components/ui";
-import { ApiError, createStaff, currentStaff, listStaff, lastLink, ROLE_LABEL, sendStaffLink, setStaffActive, updateStaff, type StaffInput, type StaffPublic } from "@/lib/api";
+import { ApiError, createStaff, currentStaff, listStaff, ROLE_LABEL, sendStaffLink, setStaffActive, updateStaff, type StaffInput, type StaffPublic } from "@/lib/api";
 
 const emptyForm: StaffInput = { email: "", name: "", role: "member", position: "강사", subject: "" };
 const ROLE_DESC: Record<StaffInput["role"], string> = {
@@ -28,11 +28,13 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
+type Row = StaffPublic & { lastLink?: Awaited<ReturnType<typeof listStaff>>[number]["lastLink"] };
+
 export default function StaffPage() {
   const me = currentStaff();
-  const [rows, setRows] = useState<StaffPublic[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(null);
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState<StaffPublic | "new" | null>(null); // 패널에 보이는 직원
+  const [open, setOpen] = useState<Row | "new" | null>(null); // 패널에 보이는 직원
   const [form, setForm] = useState<StaffInput | null>(null); // 편집 모드일 때만
   const [sent, setSent] = useState<{ staffId: number; text: string } | null>(null); // 방금 보낸 메일 안내
   const [confirm, setConfirm] = useState<{ title: string; body: string; label: string; danger?: boolean; run: () => Promise<void> } | null>(null);
@@ -195,7 +197,7 @@ export default function StaffPage() {
                 </p>
               )}
               {(() => {
-                const l = lastLink(cur.id);
+                const l = cur.lastLink;
                 if (!l) return null;
                 const when = (t: string) => `${Number(t.slice(5, 7))}/${Number(t.slice(8, 10))} ${t.slice(11, 16)}`;
                 return (

@@ -2,7 +2,7 @@
 // 운영 수강 등록 모달. 학생 상세(강좌 고르기) · 강좌 상세(학생 고르기) 두 곳에서 쓴다
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Chip, Dialog, Loader, Modal, SearchInput, fmtDate } from "@/components/ui";
-import { ApiError, ENROLL_CHANNELS, GRADE_LABEL, enrollByStaff, listClasses, listStudents, nextSessionDate, scheduleText, type ClassInfo, type EnrollChannel, type StudentRow } from "@/lib/api";
+import { ApiError, ENROLL_CHANNELS, GRADE_LABEL, enrollByStaff, listClasses, listStudents, scheduleText, type ClassInfo, type EnrollChannel, type StudentRow } from "@/lib/api";
 import type { Student } from "@/lib/types";
 
 export function EnrollModal({
@@ -45,7 +45,7 @@ export function EnrollModal({
   const classList = useMemo(() => (classes ?? []).filter((c) => !k || c.name.includes(k) || c.teacherName.includes(k)), [classes, k]);
   const studentList = useMemo(() => (students ?? []).filter((r) => !k || r.student.name.includes(k)).slice(0, 30), [students, k]);
   const rosterIds = classInfo ? (students ?? []).filter((r) => r.classes.includes(classInfo.name)).map((r) => r.student.id) : [];
-  const start = cls ? nextSessionDate(cls.id) : null;
+  const start = cls?.nextDate ?? null;
   const offGrade = !!cls && !!stu && cls.target_grade !== stu.grade;
 
   const submit = async () => {
