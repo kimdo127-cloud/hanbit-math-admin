@@ -104,6 +104,7 @@ export const listStudents = rpc("listStudents");
 export const getStudentDetail = rpc("getStudentDetail");
 export const updateStudent = rpc("updateStudent");
 export const createStudent = rpc("createStudent");
+export const listChatLogs = rpc("listChatLogs");
 export const endEnrollment = rpc("endEnrollment");
 export const listSessionDates = rpc("listSessionDates");
 export const getAttendanceSheet = rpc("getAttendanceSheet");

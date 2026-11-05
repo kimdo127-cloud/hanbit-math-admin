@@ -987,3 +987,18 @@ export async function enrollByStaff(studentId: number, classId: number, channel:
   saveDB(db);
   return { start };
 }
+
+// 챗봇 문의 내역 (고객센터 > 챗봇 문의 기록). 백엔드가 chat_logs 표에서 읽는다 (목업 없음, 타입만)
+export interface ChatLog {
+  id: number;
+  asked_at: string;
+  question: string;
+  answer: string | null;
+  regulations: string;
+  status: "answered" | "unknown" | "error";
+  parent_name: string | null;
+  parent_email: string | null;
+}
+export async function listChatLogs(): Promise<ChatLog[]> {
+  throw new ApiError("챗봇 문의 내역은 서버에서만 볼 수 있어요.", 503);
+}

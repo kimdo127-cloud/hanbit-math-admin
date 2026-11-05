@@ -1,6 +1,6 @@
 // 메뉴 구조 한 곳에서 관리: 사이드바와 브레드크럼이 같이 쓴다
 // 메뉴는 업무 단위로 묶는다 (업무 흐름·CRUD 단위 업무 기준). 권한 등급별로 보이는 메뉴가 다르다
-import { BookOpen, CalendarCheck, LayoutDashboard, Receipt, RefreshCcw, UserCog, Users } from "lucide-react";
+import { BookOpen, Bot, CalendarCheck, LayoutDashboard, Receipt, RefreshCcw, UserCog, Users } from "lucide-react";
 
 export type Need = "makeups" | "payments" | "students" | "staff";
 export const GROUPS: { title?: string; items: { href: string; label: string; icon: typeof LayoutDashboard; need?: Need }[] }[] = [
@@ -15,6 +15,7 @@ export const GROUPS: { title?: string; items: { href: string; label: string; ico
   },
   { title: "학생 관리", items: [{ href: "/students", label: "학생", icon: Users, need: "students" }] },
   { title: "수납 관리", items: [{ href: "/payments", label: "수납 · 환불", icon: Receipt, need: "payments" }] },
+  { title: "고객센터", items: [{ href: "/chat-logs", label: "챗봇 문의 내역", icon: Bot, need: "students" }] },
   { title: "설정", items: [{ href: "/staff", label: "직원 계정", icon: UserCog, need: "staff" }] },
 ];
 export const MENU = GROUPS.flatMap((g) => g.items);
