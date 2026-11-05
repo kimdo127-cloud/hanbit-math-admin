@@ -9,6 +9,7 @@ import { ApiError, createStudent, GRADE_LABEL, listStudents, type StudentRow } f
 import type { Grade } from "@/lib/types";
 
 const RELATIONS = ["엄마", "아빠", "할머니", "할아버지", "보호자"];
+const INVITE_URL = "https://hanbit-math-web.vercel.app/signup";
 const emptyForm = () => ({ name: "", grade: 7 as Grade, school: "", birth_date: "", guardians: [{ relation: "엄마", phone: "" }] });
 
 export default function StudentsPage() {
@@ -22,6 +23,7 @@ export default function StudentsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [invite, setInvite] = useState<string | null>(null); // 등록 후 학부모에게 보낼 가입 안내 문자
 
   const load = useCallback(() => {
     listStudents().then(setRows);
@@ -34,8 +36,13 @@ export default function StudentsPage() {
     try {
       const r = await createStudent(form);
       setOpen(false);
-      setToast(`${form.name} 학생을 등록했어요${r.sibling ? ` (${r.sibling} 학생과 같은 가족)` : ""}. 보호자가 이 번호로 앱에 가입하면 연결돼요`);
       load();
+      // 형제(이미 가입한 가족)면 앱에 자동으로 보이므로 안내 문자 없이 알림만
+      if (r.sibling) setToast(`${form.name} 학생을 등록했어요 (${r.sibling} 학생과 같은 가족이라 앱에 바로 보여요)`);
+      else
+        setInvite(
+          `[한빛수학] ${form.name} 학생 등록이 완료됐어요.\n학부모 앱에서 이 번호(${form.guardians[0].phone})와 자녀 이름으로 가입하면 수업 · 출결 · 납부를 볼 수 있어요.\n${INVITE_URL}`,
+        );
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
     } finally {
@@ -162,6 +169,26 @@ export default function StudentsPage() {
           </Button>
           <Button className="flex-1" disabled={busy || !form.name.trim() || !form.school.trim() || !form.birth_date || !form.guardians[0].phone.trim()} onClick={save}>
             {busy ? "등록 중…" : "등록"}
+          </Button>
+        </div>
+      </Modal>
+      <Modal open={!!invite} onClose={() => setInvite(null)} title="학부모 초대 문자" width={480}>
+        <p className="mb-3 text-[13px] text-grey-500">보호자에게 문자나 카카오톡으로 보내 주세요. 링크에서 이 번호로 가입하면 자녀가 자동으로 연결돼요.</p>
+        <pre className="whitespace-pre-wrap rounded-xl bg-grey-100 px-4 py-3 font-sans text-[14px] leading-relaxed text-grey-900">{invite}</pre>
+        <div className="mt-5 flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={() => setInvite(null)}>
+            닫기
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() => {
+              navigator.clipboard?.writeText(invite ?? "").then(
+                () => (setInvite(null), setToast("초대 문자를 복사했어요")),
+                () => setToast("복사하지 못했어요. 글자를 직접 선택해 주세요"),
+              );
+            }}
+          >
+            문자 복사
           </Button>
         </div>
       </Modal>
