@@ -20,7 +20,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={`${d.me.name}님, 오늘 할 일이에요`} desc={`${fmtDate(d.today)} 기준`} />
+      <PageHeader title="대시보드" desc={`${fmtDate(d.today)} 기준`} />
 
       {!d.member && (
       <div className="grid grid-cols-4 gap-3">
