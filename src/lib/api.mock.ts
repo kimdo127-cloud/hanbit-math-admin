@@ -501,7 +501,8 @@ export async function createStudent(input: { name: string; grade: Grade; school:
   const sibling = known ? db.students.find((s) => s.id === known.student_id)!.name : null;
   addLog(db, me, sid, "student", "create", `학생 등록: ${input.name.trim()} · ${GRADE_LABEL[input.grade]} · ${input.school.trim()}${sibling ? ` (${sibling} 학생과 같은 가족)` : ""}`);
   saveDB(db);
-  return { id: sid, sibling };
+  // 백엔드는 보호자 번호마다 서버 비밀값으로 초대 코드를 만든다. 목업은 자리만 채움
+  return { id: sid, sibling, invites: guardians.map((g) => ({ relation: g.relation, phone: g.phone, code: "mock" })) };
 }
 
 export async function endEnrollment(enrollmentId: number, endDate: string) {

@@ -41,7 +41,7 @@ export default function StudentsPage() {
       if (r.sibling) setToast(`${form.name} 학생을 등록했어요 (${r.sibling} 학생과 같은 가족이라 앱에 바로 보여요)`);
       else
         setInvite(
-          `[한빛수학] ${form.name} 학생 등록이 완료됐어요.\n학부모 앱에서 이 번호(${form.guardians[0].phone})와 자녀 이름으로 가입하면 수업 · 출결 · 납부를 볼 수 있어요.\n${INVITE_URL}`,
+          `[한빛수학] ${form.name} 학생 등록이 완료됐어요.\n아래 링크로 들어가 이 번호(${r.invites[0].phone})와 자녀 이름으로 가입하면 수업 · 출결 · 납부를 볼 수 있어요. 가입은 이 링크로만 할 수 있어요.\n${INVITE_URL}?code=${r.invites[0].code}`,
         );
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
