@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Crumbs, Dialog, EditBar, Loader, Select, TextField, Toast } from "@/components/ui";
 import { ApiError, currentStaff, getClassDetail, GRADE_LABEL, listTeachers, saveClass, WEEKDAY, type ClassInput, type StaffPublic } from "@/lib/api";
-import type { Grade } from "@/lib/types";
+import type { ClassLevel, Grade } from "@/lib/types";
 
 // 수업 시각은 30분 단위 24시간제 (오전·오후 혼동 방지)
 const TIMES = Array.from({ length: 30 }, (_, i) => {
@@ -40,7 +40,7 @@ export function ClassForm({ id }: { id: number | null }) {
     listTeachers().then(async (ts) => {
       setTeachers(ts);
       if (id === null) {
-        setForm({ name: "", target_grade: 7, teacher_id: ts[0]?.id ?? 0, capacity: 8, monthly_fee: 280000, level: "", description: "", textbook: "", schedules: [], plan: [] });
+        setForm({ name: "", target_grade: 7, teacher_id: ts[0]?.id ?? 0, capacity: 8, monthly_fee: 280000, level: "기본", description: "", textbook: "", schedules: [], plan: [] });
         return;
       }
       const d = await getClassDetail(id);
@@ -153,7 +153,11 @@ export function ClassForm({ id }: { id: number | null }) {
 
         <Section title="강좌 소개" desc="고객 앱 '수강 신청 › 강좌 상세'에 그대로 보여요.">
           <div className="grid grid-cols-2 gap-3">
-            <TextField label="수준" value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} placeholder="기본 · 심화 · 내신 대비" />
+            <Select label="수준 (레벨테스트 판정과 같은 값)" value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value as ClassLevel })}>
+              <option value="기본">기본</option>
+              <option value="심화">심화</option>
+              <option value="최상위">최상위</option>
+            </Select>
             <TextField label="교재" value={form.textbook} onChange={(e) => setForm({ ...form, textbook: e.target.value })} placeholder="개념원리 중학 수학 2-2" />
           </div>
           <label className="block">

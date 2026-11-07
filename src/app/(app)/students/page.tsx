@@ -96,7 +96,7 @@ export default function StudentsPage() {
           수강 중단 {rows.filter((r) => !r.active && r.enrolledBefore).length}
         </Chip>
       </div>
-      <Table head={["이름", "학년", "다니는 강좌", "이번 달 출석률", "출석·지각·결석", "보강", "미납"]} empty="찾는 학생이 없어요.">
+      <Table head={["이름", "학년", "레벨", "다니는 강좌", "이번 달 출석률", "출석·지각·결석", "보강", "미납"]} empty="찾는 학생이 없어요.">
         {shown.map((r) => (
           <tr key={r.student.id} onClick={() => { router.push(`/students/${r.student.id}`); }} className="cursor-pointer hover:bg-grey-50">
             <Td>
@@ -105,6 +105,7 @@ export default function StudentsPage() {
               </Link>
             </Td>
             <Td>{GRADE_LABEL[r.student.grade]}</Td>
+            <Td className="text-grey-700">{r.level ?? "-"}</Td>
             <Td className="text-grey-700">
               {r.classes.join(", ") || <span className="text-grey-400">다니는 강좌 없음</span>}
               {r.offGrade && (

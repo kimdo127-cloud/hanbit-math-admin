@@ -1,20 +1,23 @@
 "use client";
 // 학생 상세 (공통 규칙: 경로·뒤로 → 제목 → 탭, 기본은 보기 모드, [수정] → 편집 모드 + 하단 저장 바)
-// 탭: 기본 정보 / 수강 / 출결 / 보강 / 수납·환불 / 변경 이력
+// 탭: 기본 정보 / 수강 / 출결 / 보강 / 레벨테스트 / 수납·환불 / 변경 이력
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Crumbs, Dialog, EditBar, Loader, Modal, Select, Table, Td, TextField, Toast, fmtDate, won } from "@/components/ui";
 import { EnrollModal } from "@/components/enroll-modal";
-import { ApiError, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
+import { addLevelTest, ApiError, deleteLevelTest, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
+import { ADVANCE_PASS, judgeLevel, LEVEL_MAX } from "@/lib/level";
 import { shiftMonth } from "@/lib/calc";
-import type { Grade } from "@/lib/types";
+import type { Grade, LevelTestKind } from "@/lib/types";
 
 type Detail = Awaited<ReturnType<typeof getStudentDetail>>;
-const TABS = ["기본 정보", "수강", "출결", "보강", "수납·환불", "변경 이력"] as const;
+const TABS = ["기본 정보", "수강", "출결", "보강", "레벨테스트", "수납·환불", "변경 이력"] as const;
 type Tab = (typeof TABS)[number];
 
-const ENTITY_LABEL: Record<string, string> = { student: "학생", enrollment: "수강", attendance: "출결", makeup: "보강", payment: "수납", refund: "환불", class: "강좌", staff: "직원" };
+const ENTITY_LABEL: Record<string, string> = { student: "학생", enrollment: "수강", attendance: "출결", makeup: "보강", payment: "수납", refund: "환불", class: "강좌", staff: "직원", level_test: "레벨테스트" };
+const LEVEL_TONE: Record<string, "grey" | "brand" | "success"> = { 기본: "grey", 심화: "brand", 최상위: "success" };
+type TestForm = { kind: LevelTestKind; testedOn: string; concept: string; type: string; advanced: string; memo: string };
 const MK_STATE: Record<MakeupRow["state"], { label: string; tone: "brand" | "success" | "warning" | "grey" }> = {
   available: { label: "신청 전", tone: "warning" },
   booked: { label: "보강 예정", tone: "brand" },
@@ -44,6 +47,8 @@ export default function StudentDetailPage() {
   const [endDate, setEndDate] = useState(today());
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [testForm, setTestForm] = useState<TestForm | null>(null);
+  const [delTest, setDelTest] = useState<number | null>(null);
 
   const load = useCallback(() => {
     getStudentDetail(id).then(setD).catch((e) => setError(e.message));
@@ -84,6 +89,35 @@ export default function StudentDetailPage() {
     }
   };
 
+  // 레벨테스트 입력: 점수만 넣으면 판정은 규칙이 정한다 (화면은 미리 보기, 저장 때 백엔드가 다시 계산)
+  const num = (v: string) => (v.trim() === "" ? NaN : Number(v));
+  const preview = testForm && [testForm.concept, testForm.type, testForm.advanced].every((v) => v.trim() !== "")
+    ? { total: num(testForm.concept) + num(testForm.type) + num(testForm.advanced), level: judgeLevel(num(testForm.concept), num(testForm.type), num(testForm.advanced)) }
+    : null;
+  const saveTest = async () => {
+    if (!testForm) return;
+    try {
+      await addLevelTest(id, { kind: testForm.kind, testedOn: testForm.testedOn, concept: num(testForm.concept), type: num(testForm.type), advanced: num(testForm.advanced), memo: testForm.memo });
+      setTestForm(null);
+      setToast("레벨테스트 결과를 저장했어요");
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const confirmDelTest = async () => {
+    if (delTest === null) return;
+    try {
+      await deleteLevelTest(delTest);
+      setDelTest(null);
+      setToast("레벨테스트 기록을 지웠어요");
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const latestTest = d.levelTests.find((t) => t.kind !== "advance");
+
   return (
     <>
       <Crumbs items={[{ label: s.name }]} />
@@ -92,6 +126,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-[26px] font-bold">{s.name}</h1>
             <Badge>{GRADE_LABEL[s.grade]}</Badge>
+            {latestTest && <Badge tone={LEVEL_TONE[latestTest.result_level]}>레벨 {latestTest.result_level}</Badge>}
             {active.length === 0 && <Badge tone="grey">다니는 강좌 없음</Badge>}
           </div>
           <p className="mt-1 text-[14px] text-grey-500">
@@ -274,6 +309,41 @@ export default function StudentDetailPage() {
         </Table>
       )}
 
+      {tab === "레벨테스트" && (
+        <>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-[14px] text-grey-500">
+              정기 테스트는 2월·8월 셋째 토요일 (반 편성용) · 입학·선행 테스트는 수시 · 판정: 70점 미만 또는 개념 24점 미만 기본, 90점 이상·심화 15점 이상 최상위, 그 사이 심화
+              {d.canAdvance && <b className="ml-2 text-brand">선행 상담 대상</b>}
+            </p>
+            <Button size="s" onClick={() => setTestForm({ kind: "entry", testedOn: today(), concept: "", type: "", advanced: "", memo: "" })}>
+              결과 입력
+            </Button>
+          </div>
+          <Table head={["날짜", "종류", "시험지", "개념", "유형", "심화", "총점", "판정", "입력", "메모", ""]} empty="레벨테스트 기록이 없어요.">
+            {d.levelTests.map((t) => (
+              <tr key={t.id}>
+                <Td className="tabular text-grey-700">{fmtDate(t.tested_on)}</Td>
+                <Td>{t.kindLabel}</Td>
+                <Td>{GRADE_LABEL[t.test_grade]}</Td>
+                <Td className="tabular">{t.concept_score}</Td>
+                <Td className="tabular">{t.type_score}</Td>
+                <Td className="tabular">{t.advanced_score}</Td>
+                <Td className="tabular font-semibold">{t.total_score}</Td>
+                <Td>{t.kind === "advance" ? <Badge tone={t.advance_ok ? "success" : "grey"}>{t.advance_ok ? "선행 통과" : "선행 미통과"}</Badge> : <Badge tone={LEVEL_TONE[t.result_level]}>{t.result_level}</Badge>}</Td>
+                <Td className="text-grey-500">{t.staffName}</Td>
+                <Td className="max-w-56 truncate text-grey-700">{t.memo || "-"}</Td>
+                <Td>
+                  <Button size="s" variant="ghost" onClick={() => setDelTest(t.id)}>
+                    삭제
+                  </Button>
+                </Td>
+              </tr>
+            ))}
+          </Table>
+        </>
+      )}
+
       {tab === "수납·환불" && (
         <Table head={["달", "강좌", "금액", "상태", "납부일"]} empty="수납 기록이 없어요.">
           {d.paymentHistory.map((p) => (
@@ -336,6 +406,57 @@ export default function StudentDetailPage() {
           </Button>
         </div>
       </Modal>
+      <Modal open={!!testForm} onClose={() => setTestForm(null)} title="레벨테스트 결과 입력">
+        {testForm && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="종류" value={testForm.kind} onChange={(e) => setTestForm({ ...testForm, kind: e.target.value as LevelTestKind })}>
+                <option value="entry">입학</option>
+                <option value="regular">정기 (2월·8월)</option>
+                <option value="advance">선행 (다음 학년 시험지)</option>
+              </Select>
+              <TextField label="시험 날짜" type="date" max={today()} value={testForm.testedOn} onChange={(e) => setTestForm({ ...testForm, testedOn: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {(
+                [
+                  ["concept", "개념", LEVEL_MAX.concept],
+                  ["type", "유형", LEVEL_MAX.type],
+                  ["advanced", "심화", LEVEL_MAX.advanced],
+                ] as const
+              ).map(([k, label, max]) => (
+                <TextField key={k} label={`${label} (0~${max})`} type="number" min={0} max={max} value={testForm[k]} onChange={(e) => setTestForm({ ...testForm, [k]: e.target.value })} />
+              ))}
+            </div>
+            <TextField label="메모 (강사 코멘트, 학부모에게는 보이지 않음)" value={testForm.memo} onChange={(e) => setTestForm({ ...testForm, memo: e.target.value })} />
+            <p className="rounded-m bg-grey-50 px-4 py-3 text-[14px] text-grey-700">
+              {preview
+                ? testForm.kind === "advance"
+                  ? `총점 ${preview.total}점 → ${preview.total >= ADVANCE_PASS ? "선행 통과" : "선행 미통과"} (${ADVANCE_PASS}점 이상 통과, ${GRADE_LABEL[Math.min(12, s.grade + 1) as Grade]} 시험지)`
+                  : `총점 ${preview.total}점 → 판정 ${preview.level}`
+                : "점수를 넣으면 판정을 미리 보여 줘요. 저장할 때 서버가 같은 규칙으로 다시 계산해요."}
+            </p>
+            <div className="flex gap-2 pt-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setTestForm(null)}>
+                취소
+              </Button>
+              <Button className="flex-1" onClick={saveTest}>
+                저장
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+      <Dialog
+        open={delTest !== null}
+        title="레벨테스트 기록을 지울까요?"
+        body="잘못 입력한 기록만 지워 주세요. 지운 사실은 변경 이력에 남아요."
+        primary="삭제"
+        danger
+        onPrimary={confirmDelTest}
+        secondary="취소"
+        onSecondary={() => setDelTest(null)}
+      />
       <Dialog open={!!error} title="처리할 수 없어요" body={error} primary="확인" onPrimary={() => setError(null)} />
       <Toast message={toast} onDone={() => setToast(null)} />
     </>

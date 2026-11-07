@@ -16,6 +16,7 @@ import {
 } from "./calc";
 import { mockHash, TODAY } from "./seed";
 import { getSessionStaffId, loadDB, nextId, saveDB, setSessionStaffId } from "./store";
+import type { ClassLevel, LevelTest, LevelTestKind } from "./types";
 import type { ActivityLog, AttendanceStatus, ClassRoom, ClassSchedule, DB, Grade, Staff, Student } from "./types";
 
 // 변경 이력 남기기 (직원이 한 일). 백엔드에서는 같은 트랜잭션 안에서 activity_logs에 INSERT
@@ -301,7 +302,7 @@ export interface ClassInput {
   teacher_id: number;
   capacity: number;
   monthly_fee: number;
-  level: string;
+  level: ClassLevel; // 기본 · 심화 · 최상위
   description: string;
   textbook: string;
   schedules: { weekday: number; start_time: string; end_time: string }[];
@@ -339,7 +340,7 @@ export async function saveClass(id: number | null, input: ClassInput) {
     teacher_id: input.teacher_id,
     capacity: input.capacity,
     monthly_fee: input.monthly_fee,
-    level: input.level.trim(),
+    level: input.level,
     description: input.description.trim(),
     textbook: input.textbook.trim(),
   };
@@ -410,6 +411,7 @@ export interface StudentRow {
   enrolledBefore: boolean; // 수강 기록이 있음 (없으면 등록만 하고 수강 전)
   attendance: AttendanceSummary;
   unpaid: number;
+  level?: string | null; // 백엔드: 최근 레벨테스트 판정
 }
 
 export async function listStudents(month = currentMonth()): Promise<StudentRow[]> {
@@ -458,6 +460,8 @@ export async function getStudentDetail(id: number, month = currentMonth()) {
       .sort((a, b) => b.localeCompare(a))
       .flatMap((m) => paymentRows(db, s, m).map((r) => ({ ...r, month: m }))),
     logs: db.activity_logs.filter((l) => l.student_id === id).sort((a, b) => b.at.localeCompare(a.at)),
+    levelTests: [] as LevelTestView[], // 백엔드에서 채움
+    canAdvance: false,
   };
 }
 
@@ -1002,4 +1006,48 @@ export interface ChatLog {
 }
 export async function listChatLogs(): Promise<ChatLog[]> {
   throw new ApiError("챗봇 문의 내역은 서버에서만 볼 수 있어요.", 503);
+}
+
+
+// 레벨테스트 (목업 없음, 타입만). 규칙·권한은 백엔드 logic/admin-api.ts · level.ts
+export interface LevelTestView extends LevelTest {
+  kindLabel: string;
+  staffName: string;
+}
+export interface LevelScoreInput {
+  concept: number;
+  type: number;
+  advanced: number;
+  memo?: string;
+}
+export interface LevelSheetRow {
+  student: Student;
+  test: LevelTestView | null;
+  previous: { tested_on: string; total_score: number; result_level: string } | null;
+}
+const serverOnly = () => {
+  throw new ApiError("서버에서만 동작해요.", 503);
+};
+export async function addLevelTest(studentId: number, input: LevelScoreInput & { kind: LevelTestKind; testedOn: string }): Promise<void> {
+  void studentId;
+  void input;
+  return serverOnly();
+}
+export async function deleteLevelTest(testId: number): Promise<void> {
+  void testId;
+  return serverOnly();
+}
+export async function getLevelTestSheet(classId: number, testedOn: string): Promise<{ cls: { id: number; name: string; level: string }; testedOn: string; rows: LevelSheetRow[] }> {
+  void classId;
+  void testedOn;
+  return serverOnly();
+}
+export async function saveLevelTestSheet(classId: number, testedOn: string, entries: (LevelScoreInput & { studentId: number })[]): Promise<{ saved: number }> {
+  void classId;
+  void testedOn;
+  void entries;
+  return serverOnly();
+}
+export async function levelTestRules(): Promise<{ max: { concept: number; type: number; advanced: number }; advancePass: number; nextRegular: string }> {
+  return serverOnly();
 }

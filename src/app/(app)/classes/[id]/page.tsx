@@ -40,6 +40,9 @@ export default function ClassDetailPage() {
               수정
             </Link>
           )}
+          <Link href={`/classes/${c.id}/level-test`} className="flex h-10 items-center rounded-m border border-grey-200 bg-white px-4 text-[15px] font-semibold hover:bg-grey-50">
+            레벨테스트 입력
+          </Link>
           <Link href={`/attendance?class=${c.id}`} className="flex h-10 items-center rounded-m bg-brand px-4 text-[15px] font-semibold text-white">
             출결 확인
           </Link>
