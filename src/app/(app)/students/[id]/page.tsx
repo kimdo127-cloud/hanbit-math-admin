@@ -6,8 +6,9 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Crumbs, Dialog, EditBar, Loader, Modal, Select, Table, Td, TextField, Toast, fmtDate, won } from "@/components/ui";
 import { EnrollModal } from "@/components/enroll-modal";
-import { addLevelTest, ApiError, deleteLevelTest, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
+import { addContactByStaff, addLevelTest, ApiError, deleteLevelTest, removeContactByStaff, sendParentInvite, setPrimaryContact, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
 import { ADVANCE_PASS, judgeLevel, LEVEL_MAX } from "@/lib/level";
+import { inviteMessage } from "@/lib/invite-text";
 import { shiftMonth } from "@/lib/calc";
 import type { Grade, LevelTestKind } from "@/lib/types";
 
@@ -15,7 +16,15 @@ type Detail = Awaited<ReturnType<typeof getStudentDetail>>;
 const TABS = ["기본 정보", "수강", "출결", "보강", "레벨테스트", "수납·환불", "변경 이력"] as const;
 type Tab = (typeof TABS)[number];
 
-const ENTITY_LABEL: Record<string, string> = { student: "학생", enrollment: "수강", attendance: "출결", makeup: "보강", payment: "수납", refund: "환불", class: "강좌", staff: "직원", level_test: "레벨테스트" };
+const ENTITY_LABEL: Record<string, string> = { contact: "연락처", invitation: "앱 초대", student: "학생", enrollment: "수강", attendance: "출결", makeup: "보강", payment: "수납", refund: "환불", class: "강좌", staff: "직원", level_test: "레벨테스트" };
+const INVITE_STATE: Record<string, { label: string; tone: "brand" | "success" | "warning" | "grey" }> = {
+  joined: { label: "가입 완료", tone: "success" },
+  active: { label: "초대 보냄", tone: "brand" },
+  expired: { label: "초대 만료", tone: "warning" },
+  none: { label: "초대 전", tone: "grey" },
+};
+const RELATIONS = ["엄마", "아빠", "할머니", "할아버지", "보호자"];
+const at = (v: string) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))} ${v.slice(11, 16)}`;
 const LEVEL_TONE: Record<string, "grey" | "brand" | "success"> = { 기본: "grey", 심화: "brand", 최상위: "success" };
 type TestForm = { kind: LevelTestKind; testedOn: string; concept: string; type: string; advanced: string; memo: string };
 const MK_STATE: Record<MakeupRow["state"], { label: string; tone: "brand" | "success" | "warning" | "grey" }> = {
@@ -49,6 +58,8 @@ export default function StudentDetailPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [testForm, setTestForm] = useState<TestForm | null>(null);
   const [delTest, setDelTest] = useState<number | null>(null);
+  const [inviteText, setInviteText] = useState<string | null>(null);
+  const [newContact, setNewContact] = useState<{ relation: string; phone: string } | null>(null);
 
   const load = useCallback(() => {
     getStudentDetail(id).then(setD).catch((e) => setError(e.message));
@@ -117,6 +128,25 @@ export default function StudentDetailPage() {
     }
   };
   const latestTest = d.levelTests.find((t) => t.kind !== "advance");
+  const run = async (fn: () => Promise<unknown>, msg: string) => {
+    try {
+      await fn();
+      setToast(msg);
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const sendInvite = async () => {
+    try {
+      const r = await sendParentInvite(id);
+      setInviteText(inviteMessage(s.name, r));
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const inv = d.invite;
 
   return (
     <>
@@ -200,9 +230,63 @@ export default function StudentDetailPage() {
           <section className="rounded-3xl bg-white p-6">
             <h2 className="mb-2 text-[17px] font-bold">가족 · 연락처</h2>
             <Row k="보호자 계정" v={d.parent ? `${d.parent.name} (${d.parent.email})` : "앱 가입 전"} />
+            <div className="flex items-center border-b border-grey-100 py-3.5 text-[15px]">
+              <span className="w-32 shrink-0 text-grey-500">앱 초대</span>
+              <span className="flex flex-1 items-center gap-2">
+                <Badge tone={INVITE_STATE[inv.state].tone}>{INVITE_STATE[inv.state].label}</Badge>
+                {inv.state === "active" && inv.expiresAt && <span className="tabular text-[13px] text-grey-500">{inv.phone} · {at(inv.expiresAt)}까지</span>}
+                {inv.state === "expired" && inv.expiresAt && <span className="tabular text-[13px] text-grey-500">{at(inv.expiresAt)}에 만료</span>}
+                {inv.state === "joined" && inv.usedAt && <span className="tabular text-[13px] text-grey-500">{at(inv.usedAt)} 가입</span>}
+              </span>
+              {inv.state !== "joined" && (
+                <Button size="s" variant={inv.state === "active" ? "secondary" : "primary"} onClick={sendInvite}>
+                  {inv.state === "none" ? "초대 보내기" : "다시 보내기"}
+                </Button>
+              )}
+            </div>
             {d.contacts.map((c) => (
-              <Row key={c.id} k={c.relation} v={<span className="tabular">{c.phone}</span>} />
+              <div key={c.id} className="flex items-center border-b border-grey-100 py-3 text-[15px]">
+                <span className="w-32 shrink-0 text-grey-500">{c.relation}</span>
+                <span className="tabular flex-1 font-semibold">
+                  {c.phone}
+                  {c.is_primary && (
+                    <span className="ml-2">
+                      <Badge tone="brand">대표</Badge>
+                    </span>
+                  )}
+                </span>
+                {!c.is_primary && (
+                  <>
+                    <Button size="s" variant="ghost" onClick={() => run(() => setPrimaryContact(c.id), "대표 번호를 바꿨어요. 초대는 새 번호로 다시 보내 주세요")}>
+                      대표로
+                    </Button>
+                    <Button size="s" variant="ghost" onClick={() => run(() => removeContactByStaff(c.id), "연락처를 지웠어요")}>
+                      삭제
+                    </Button>
+                  </>
+                )}
+              </div>
             ))}
+            {newContact ? (
+              <div className="flex items-end gap-2 border-b border-grey-100 py-3">
+                <Select className="w-28" value={newContact.relation} onChange={(e) => setNewContact({ ...newContact, relation: e.target.value })}>
+                  {RELATIONS.map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </Select>
+                <TextField className="flex-1" inputMode="tel" placeholder="010-0000-0000" value={newContact.phone} onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })} />
+                <Button size="m" variant="secondary" onClick={() => setNewContact(null)}>
+                  취소
+                </Button>
+                <Button size="m" disabled={!newContact.phone.trim()} onClick={() => run(async () => { await addContactByStaff(id, newContact.relation, newContact.phone); setNewContact(null); }, "연락처를 추가했어요")}>
+                  추가
+                </Button>
+              </div>
+            ) : (
+              <button onClick={() => setNewContact({ relation: "아빠", phone: "" })} className="py-3 text-[14px] font-semibold text-brand">
+                + 연락처 추가
+              </button>
+            )}
             <Row
               k="형제"
               v={
@@ -217,7 +301,7 @@ export default function StudentDetailPage() {
                 )
               }
             />
-            <p className="mt-3 text-[12px] text-grey-500">연락처는 보호자가 앱에서 관리해요.</p>
+            <p className="mt-3 text-[12px] text-grey-500">연락처는 가족 단위로 저장돼 형제 모두에게 같이 적용돼요. 가입 후에는 보호자도 앱에서 대표가 아닌 번호를 관리할 수 있어요.</p>
           </section>
         </div>
       )}
@@ -457,6 +541,26 @@ export default function StudentDetailPage() {
         secondary="취소"
         onSecondary={() => setDelTest(null)}
       />
+      <Modal open={!!inviteText} onClose={() => setInviteText(null)} title="학부모 초대 문자">
+        <p className="mb-3 text-[13px] text-grey-500">대표 번호로 보내 주세요. 이전에 보낸 링크는 이제 쓸 수 없어요. 이 창을 닫으면 링크를 다시 볼 수 없어요.</p>
+        <pre className="whitespace-pre-wrap rounded-xl bg-grey-100 px-4 py-3 font-sans text-[14px] leading-relaxed text-grey-900">{inviteText}</pre>
+        <div className="mt-5 flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={() => setInviteText(null)}>
+            닫기
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() =>
+              navigator.clipboard?.writeText(inviteText ?? "").then(
+                () => (setInviteText(null), setToast("초대 문자를 복사했어요")),
+                () => setToast("복사하지 못했어요. 글자를 직접 선택해 주세요"),
+              )
+            }
+          >
+            문자 복사
+          </Button>
+        </div>
+      </Modal>
       <Dialog open={!!error} title="처리할 수 없어요" body={error} primary="확인" onPrimary={() => setError(null)} />
       <Toast message={toast} onDone={() => setToast(null)} />
     </>

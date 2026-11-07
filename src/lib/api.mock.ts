@@ -445,7 +445,8 @@ export async function getStudentDetail(id: number, month = currentMonth()) {
     student: s,
     siblings,
     parent: db.parents.find((p) => p.family_id === s.family_id) ?? null,
-    contacts: db.student_contacts.filter((c) => c.student_id === id),
+    contacts: db.family_contacts.filter((c) => c.family_id === s.family_id).sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.id - b.id),
+    invite: { state: (db.parents.some((p) => p.family_id === s.family_id) ? "joined" : "none") as InviteState, phone: null as string | null, sentAt: null as string | null, expiresAt: null as string | null, usedAt: null as string | null }, // 백엔드: invitations
     enrollments: db.enrollments
       .filter((e) => e.student_id === id)
       .sort((a, b) => Number(a.end_date !== null) - Number(b.end_date !== null))
@@ -479,34 +480,37 @@ export async function updateStudent(id: number, input: { name: string; grade: Gr
   saveDB(db);
 }
 
-// 학생 등록 (상담 후 학원이 한다). 보호자 번호가 학부모 앱 가입의 열쇠가 된다
-// 이미 등록된 보호자 번호면 그 가족에 붙인다 (형제 → 둘째 할인)
-export async function createStudent(input: { name: string; grade: Grade; school: string; birth_date: string; guardians: { relation: string; phone: string }[] }) {
-  await wait();
-  const me = requireManager();
-  if (!input.name.trim() || !input.school.trim() || !input.birth_date) throw new ApiError("이름, 학교, 생년월일을 확인해 주세요.");
-  const guardians = input.guardians.map((g) => ({ relation: g.relation.trim(), phone: g.phone.trim() })).filter((g) => g.relation || g.phone);
-  if (guardians.length === 0) throw new ApiError("보호자 연락처를 한 개 이상 넣어 주세요. 학부모 앱 가입에 쓰여요.");
-  if (guardians.some((g) => !g.relation || !/^[0-9-]{9,13}$/.test(g.phone))) throw new ApiError("보호자 관계와 휴대폰 번호를 확인해 주세요.");
-  const db = loadDB();
-  const digits = (p: string) => p.replace(/[^0-9]/g, "");
-  const linked = db.student_contacts.filter((c) => guardians.some((g) => digits(g.phone) === digits(c.phone)));
-  const known = linked[0];
-  const sameKid = db.students.find((s) => linked.some((c) => c.student_id === s.id) && s.name === input.name.trim());
-  if (sameKid) throw new ApiError(`${sameKid.name} 학생은 이미 등록되어 있어요.`, 409);
-  let familyId = known ? db.students.find((s) => s.id === known.student_id)!.family_id : null;
-  if (familyId === null) {
-    familyId = nextId(db.families);
-    db.families.push({ id: familyId, name: `${input.name.trim()} 가족` });
-  }
-  const sid = nextId(db.students);
-  db.students.push({ id: sid, family_id: familyId, name: input.name.trim(), grade: input.grade, school: input.school.trim(), birth_date: input.birth_date });
-  guardians.forEach((g) => db.student_contacts.push({ id: nextId(db.student_contacts), student_id: sid, relation: g.relation, phone: g.phone }));
-  const sibling = known ? db.students.find((s) => s.id === known.student_id)!.name : null;
-  addLog(db, me, sid, "student", "create", `학생 등록: ${input.name.trim()} · ${GRADE_LABEL[input.grade]} · ${input.school.trim()}${sibling ? ` (${sibling} 학생과 같은 가족)` : ""}`);
-  saveDB(db);
-  // 백엔드는 보호자 번호마다 서버 비밀값으로 초대 코드를 만든다. 목업은 자리만 채움
-  return { id: sid, sibling, invites: guardians.map((g) => ({ relation: g.relation, phone: g.phone, code: "mock" })) };
+// 학생 등록 (목업은 형태만). 백엔드: 가족 단위 연락처 + 가입 전 가족이면 대표 번호로 초대 발급
+export async function createStudent(input: { name: string; grade: Grade; school: string; birth_date: string; guardians: { relation: string; phone: string }[] }): Promise<{ id: number; sibling: string | null; joined: boolean; invite: InviteIssued | null }> {
+  void input;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+
+/* ---------- 학부모 앱 초대 (목업 없음, 타입만) ---------- */
+export type InviteState = "joined" | "active" | "expired" | "none";
+export interface InviteIssued {
+  phone: string;
+  relation: string;
+  code: string;
+  expiresAt: string;
+}
+export async function sendParentInvite(studentId: number): Promise<InviteIssued> {
+  void studentId;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function setPrimaryContact(contactId: number): Promise<void> {
+  void contactId;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function addContactByStaff(studentId: number, relation: string, phone: string): Promise<void> {
+  void studentId;
+  void relation;
+  void phone;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function removeContactByStaff(contactId: number): Promise<void> {
+  void contactId;
+  throw new ApiError("서버에서만 동작해요.", 503);
 }
 
 export async function endEnrollment(enrollmentId: number, endDate: string) {
@@ -936,7 +940,8 @@ export async function kioskLookup(last4: string): Promise<KioskCandidate[]> {
   requireStaff(); // 키오스크 태블릿은 직원 계정으로 로그인해 둔다
   if (!/^\d{4}$/.test(last4)) throw new ApiError("번호 4자리를 눌러 주세요.");
   const db = loadDB();
-  const ids = [...new Set(db.student_contacts.filter((c) => c.phone.replace(/\D/g, "").endsWith(last4)).map((c) => c.student_id))];
+  const families = new Set(db.family_contacts.filter((c) => c.phone.replace(/\D/g, "").endsWith(last4)).map((c) => c.family_id));
+  const ids = db.students.filter((x) => families.has(x.family_id)).map((x) => x.id);
   return ids.flatMap((id) => {
     const st = db.students.find((x) => x.id === id)!;
     return todaySessionsFor(db, id).map(({ x, makeup }) => {

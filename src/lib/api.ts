@@ -127,3 +127,7 @@ export const deleteLevelTest = rpc("deleteLevelTest");
 export const getLevelTestSheet = rpc("getLevelTestSheet");
 export const saveLevelTestSheet = rpc("saveLevelTestSheet");
 export const levelTestRules = rpc("levelTestRules");
+export const sendParentInvite = rpc("sendParentInvite");
+export const setPrimaryContact = rpc("setPrimaryContact");
+export const addContactByStaff = rpc("addContactByStaff");
+export const removeContactByStaff = rpc("removeContactByStaff");
