@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader } from "@/components/ui";
 import { GROUPS, MENU } from "@/lib/menu";
-import { canSee, currentStaff, logout, refreshMe, resetDemo, ROLE_LABEL, type StaffPublic } from "@/lib/api";
+import { canSee, currentStaff, logout, refreshMe, ROLE_LABEL, type StaffPublic } from "@/lib/api";
 
 
 
@@ -82,15 +82,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Link href="/change-password" className="block text-[13px] text-grey-500">
             비밀번호 변경
           </Link>
-          <button
-            onClick={async () => {
-              await resetDemo().catch(() => {});
-              router.replace("/login");
-            }}
-            className="block text-[11px] text-grey-400"
-          >
-            (시연) 데이터 초기화
-          </button>
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-10 pt-8 pb-28">

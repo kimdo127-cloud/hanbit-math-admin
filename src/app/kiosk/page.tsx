@@ -1,6 +1,6 @@
 "use client";
 // 등원 키오스크: 학원 입구 태블릿. 학생이 보호자 번호 뒷자리 4자리 → 이름 → 등원
-// 등원 시각 자동 기록, 강좌 시작보다 늦으면 지각. 보호자에게 등원 알림 (사례: 세이프 출석기·체키 등하원 알림)
+// 등원 시각 자동 기록, 강좌 시작보다 늦으면 지각
 import { CheckCircle2, Delete } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -90,7 +90,7 @@ export default function KioskPage() {
             <b className="text-white">뒷자리 4자리</b>를 눌러 주세요
           </p>
         </div>
-        <p className="text-[14px] text-white/50">등원하면 보호자에게 바로 알림이 가요. 수업 시작 뒤에 누르면 지각으로 기록돼요.</p>
+        <p className="text-[14px] text-white/50">수업 시작 뒤에 누르면 지각으로 기록돼요.</p>
       </section>
 
       <section className="flex flex-col items-center justify-center p-14">
@@ -102,7 +102,6 @@ export default function KioskPage() {
               {done.time} 등원 · {done.status === "late" ? <span className="font-bold text-warning">{done.late}분 지각</span> : <span className="font-bold text-success">출석</span>}
             </p>
             <p className="mt-1 text-[18px] text-grey-500">{done.className}</p>
-            <p className="mt-8 rounded-xl bg-white px-6 py-4 text-[16px] text-grey-700">보호자에게 등원 알림을 보냈어요</p>
             <button onClick={reset} className="mt-6 text-[16px] text-grey-500 underline">
               처음으로
             </button>

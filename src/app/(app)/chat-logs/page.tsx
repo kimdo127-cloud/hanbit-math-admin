@@ -53,7 +53,7 @@ export default function ChatLogsPage() {
           </Chip>
         ))}
       </div>
-      <Table head={["시각", "보호자", "질문", "근거 규정", "결과"]} empty="아직 챗봇 문의가 없어요.">
+      <Table head={["시각", "보호자", "질문", "근거", "결과"]} empty="아직 챗봇 문의가 없어요.">
         {shown.map((r) => (
           <tr key={r.id} onClick={() => setOpen(r)} className="cursor-pointer hover:bg-grey-50">
             <Td className="tabular whitespace-nowrap text-grey-500">{when(r.asked_at)}</Td>
@@ -82,7 +82,7 @@ export default function ChatLogsPage() {
               <p className="mt-1 whitespace-pre-line leading-relaxed text-grey-700">{(open.answer ?? "답을 가져오지 못했어요 (오류).").replaceAll("**", "")}</p>
             </div>
             <div className="flex items-center justify-between text-[13px]">
-              <span className="text-grey-500">근거 규정: {open.regulations || "-"}</span>
+              <span className="text-grey-500">근거: {open.regulations || "-"}</span>
               <Badge tone={STATUS[open.status].tone}>{STATUS[open.status].label}</Badge>
             </div>
           </div>

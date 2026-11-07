@@ -223,7 +223,7 @@ export default function StudentDetailPage() {
                 <Row k="이름" v={s.name} />
                 <Row k="학년" v={GRADE_LABEL[s.grade]} />
                 <Row k="학교" v={s.school} />
-                <Row k="생년월일" v={fmtDate(s.birth_date)} />
+                <Row k="생년월일" v={s.birth_date.replaceAll("-", ". ")} />
               </>
             )}
           </section>
