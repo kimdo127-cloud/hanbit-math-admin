@@ -1,10 +1,11 @@
 "use client";
-// 등원 키오스크: 학원 입구 태블릿. 학생이 보호자 번호 뒷자리 4자리 → 이름 → 등원
+// 등원·하원 키오스크: 학원 입구 태블릿 (사례: 클래스업 키오스크 — 학생 번호 4자리 → 본인 확인 → 입장)
+// 학생이 자기 출석 번호 4자리 → 이름 확인 → 등원 또는 하원. 등원·하원 모두 학부모에게 알림
 // 등원 시각 자동 기록, 강좌 시작보다 늦으면 지각
 import { CheckCircle2, Delete } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ApiError, currentStaff, GRADE_LABEL, kioskCheckIn, kioskLookup, type KioskCandidate } from "@/lib/api";
+import { ApiError, currentStaff, GRADE_LABEL, kioskCheckIn, kioskCheckOut, kioskLookup, type KioskCandidate } from "@/lib/api";
 
 type Done = Awaited<ReturnType<typeof kioskCheckIn>>;
 
@@ -51,7 +52,7 @@ export default function KioskPage() {
       try {
         const r = await kioskLookup(next);
         if (r.length === 0) {
-          setMsg("오늘 수업이 있는 학생을 찾지 못했어요. 번호를 다시 확인해 주세요.");
+          setMsg("오늘 수업이 없거나 없는 번호예요. 번호를 다시 확인해 주세요.");
           setPin("");
         } else setList(r);
       } catch (e) {
@@ -66,7 +67,7 @@ export default function KioskPage() {
   const check = async (c: KioskCandidate) => {
     setBusy(true);
     try {
-      setDone(await kioskCheckIn(c.studentId, c.sessionId));
+      setDone(c.checkedAt ? await kioskCheckOut(c.studentId, c.sessionId) : await kioskCheckIn(c.studentId, c.sessionId));
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
     } finally {
@@ -81,13 +82,13 @@ export default function KioskPage() {
       <section className="flex flex-col justify-between bg-grey-900 p-14 text-white">
         <div>
           <p className="text-[20px] font-bold">
-            한빛수학 <span className="text-brand">등원 체크</span>
+            한빛수학 <span className="text-brand">등원 · 하원</span>
           </p>
           <p className="tabular mt-10 text-[88px] leading-none font-bold">{now}</p>
           <p className="mt-6 text-[22px] leading-relaxed text-white/80">
-            보호자 휴대폰 번호
+            내 <b className="text-white">출석 번호 4자리</b>를
             <br />
-            <b className="text-white">뒷자리 4자리</b>를 눌러 주세요
+            눌러 주세요
           </p>
         </div>
         <p className="text-[14px] text-white/50">수업 시작 뒤에 누르면 지각으로 기록돼요.</p>
@@ -96,10 +97,18 @@ export default function KioskPage() {
       <section className="flex flex-col items-center justify-center p-14">
         {done ? (
           <div className="text-center">
-            <CheckCircle2 size={96} className={`mx-auto ${done.status === "late" ? "text-warning" : "text-success"}`} />
+            <CheckCircle2 size={96} className={`mx-auto ${done.kind === "in" && done.status === "late" ? "text-warning" : "text-success"}`} />
             <p className="mt-6 text-[40px] font-bold">{done.name}</p>
             <p className="tabular mt-2 text-[24px]">
-              {done.time} 등원 · {done.status === "late" ? <span className="font-bold text-warning">{done.late}분 지각</span> : <span className="font-bold text-success">출석</span>}
+              {done.kind === "out" ? (
+                <>
+                  {done.time} <span className="font-bold">하원</span> · 조심히 가요
+                </>
+              ) : (
+                <>
+                  {done.time} 등원 · {done.status === "late" ? <span className="font-bold text-warning">{done.late}분 지각</span> : <span className="font-bold text-success">출석</span>}
+                </>
+              )}
             </p>
             <p className="mt-1 text-[18px] text-grey-500">{done.className}</p>
             <button onClick={reset} className="mt-6 text-[16px] text-grey-500 underline">
@@ -108,29 +117,34 @@ export default function KioskPage() {
           </div>
         ) : list ? (
           <div className="w-full max-w-[460px]">
-            <p className="mb-5 text-center text-[24px] font-bold">이름을 눌러 주세요</p>
+            <p className="mb-1 text-center text-[36px] font-bold">{list[0].name}</p>
+            <p className="mb-6 text-center text-[18px] text-grey-500">내 이름이 맞으면 아래 버튼을 눌러 주세요</p>
             <div className="space-y-3">
               {list.map((c) => (
                 <button
                   key={`${c.studentId}-${c.sessionId}`}
-                  disabled={!!c.checkedAt || busy}
+                  disabled={!!c.leftAt || busy}
                   onClick={() => check(c)}
                   className="flex w-full items-center justify-between rounded-2xl bg-white px-7 py-6 text-left shadow-sm active:bg-grey-50 disabled:opacity-50"
                 >
                   <span>
-                    <span className="block text-[28px] font-bold">{c.name}</span>
+                    <span className="block text-[24px] font-bold">
+                      {c.className}
+                      {c.makeup && <span className="ml-2 text-[16px] text-brand">보강</span>}
+                    </span>
                     <span className="tabular block text-[16px] text-grey-500">
-                      {GRADE_LABEL[c.grade]} · {c.className} {c.start}
-                      {c.makeup && " · 보강"}
+                      {GRADE_LABEL[c.grade]} · {c.start} 시작{c.checkedAt && ` · ${c.checkedAt} 등원`}
                     </span>
                   </span>
-                  <span className="text-[18px] font-semibold text-brand">{c.checkedAt ? `${c.checkedAt} 등원함` : "등원"}</span>
+                  <span className={`rounded-xl px-5 py-3 text-[20px] font-bold ${c.leftAt ? "text-grey-500" : "bg-brand text-white"}`}>
+                    {c.leftAt ? `${c.leftAt} 하원함` : c.checkedAt ? "하원" : "등원"}
+                  </span>
                 </button>
               ))}
             </div>
             {msg && <p className="mt-4 text-center text-[16px] text-danger">{msg}</p>}
             <button onClick={reset} className="mt-8 w-full py-3 text-[18px] text-grey-500">
-              번호 다시 누르기
+              내 이름이 아니에요
             </button>
           </div>
         ) : (

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Chip, Dialog, Loader, MonthNav, PageHeader, SearchInput, Stat, Table, Td, TextField, Modal, Toast, fmtDate, won } from "@/components/ui";
-import { ApiError, cancelPaid, fmtRefundDue, GRADE_LABEL, listPayments, listRefunds, markPaid, markRefunded, today, type RefundRow } from "@/lib/api";
+import { ApiError, cancelPaid, fmtRefundDue, GRADE_LABEL, listPayments, listRefunds, markPaid, markRefunded, sendUnpaidNotices, today, type RefundRow } from "@/lib/api";
 import { shiftMonth } from "@/lib/calc";
 
 type Row = Awaited<ReturnType<typeof listPayments>>[number];
@@ -128,7 +128,7 @@ export default function PaymentsPage() {
   }, []);
   return (
     <>
-      <PageHeader crumbs={[{ label: tab === "refund" ? "환불" : "수납" }]} title="수납 · 환불" desc="학생·강좌·달마다 납부를 남기고, 수강 중단된 수강은 5일 안에 환불을 기록해요." />
+      <PageHeader crumbs={[{ label: tab === "refund" ? "환불" : "수납" }]} title="수납 · 환불" />
       <div className="mb-6 flex gap-1 border-b border-grey-200">
         {(
           [
@@ -163,11 +163,22 @@ function PayPanel() {
   const [error, setError] = useState<string | null>(null);
   const [cancel, setCancel] = useState<Row | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [notice, setNotice] = useState(false);
 
   const load = useCallback(() => {
     setRows(null);
     listPayments(month).then(setRows);
   }, [month]);
+  // 미납 알림: 미납이 있는 가족마다 학부모 앱 알림 하나 (자녀·강좌 묶어서)
+  const sendNotice = async () => {
+    setNotice(false);
+    try {
+      const r = await sendUnpaidNotices(month);
+      setToast(`${r.families}가족에 미납 알림을 보냈어요`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
   useEffect(load, [load]);
 
   const confirmPay = async () => {
@@ -210,6 +221,11 @@ function PayPanel() {
             <Chip active={filter === "all"} onClick={() => setFilter("all")}>
               전체
             </Chip>
+            {unpaid.length > 0 && (
+              <Button size="m" variant="secondary" className="ml-auto" onClick={() => setNotice(true)}>
+                미납 알림 보내기
+              </Button>
+            )}
           </div>
           <Table head={["학생", "강좌", "청구 금액", "상태", "납부일", ""]} empty="미납이 없어요.">
             {shown!.map((r) => (
@@ -241,7 +257,6 @@ function PayPanel() {
               </tr>
             ))}
           </Table>
-          <p className="mt-3 text-[12px] text-grey-500">형제는 나이순 둘째부터 10% 할인돼요. 달 중간에 시작하면 첫 달은 남은 수업 수만큼만 청구해요 (회차 기준).</p>
         </>
       )}
 
@@ -284,6 +299,15 @@ function PayPanel() {
         }}
       />
       <Dialog open={!!error} title="처리할 수 없어요" body={error} primary="확인" onPrimary={() => setError(null)} />
+      <Dialog
+        open={notice}
+        title="미납 알림을 보낼까요?"
+        body={`${Number(month.slice(5))}월 미납이 있는 가족의 학부모 앱으로 알림이 가요.`}
+        primary="보내기"
+        secondary="취소"
+        onPrimary={sendNotice}
+        onSecondary={() => setNotice(false)}
+      />
       <Toast message={toast} onDone={() => setToast(null)} />
     </>
   );

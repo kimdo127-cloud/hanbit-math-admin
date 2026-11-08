@@ -28,7 +28,6 @@ export default function ClassesPage() {
     <>
       <PageHeader
         title="강좌"
-        desc={isAdmin ? "강좌 이름을 누르면 상세(시간표·진도 계획·수강생)를 보고 수정할 수 있어요." : "담당 강좌만 보여요. 강좌 설정과 진도 계획은 관리자가 바꿔요."}
         right={
           isAdmin && (
             <Link href="/classes/new" className="flex h-10 items-center gap-1 rounded-m bg-brand px-4 text-[15px] font-semibold text-white">

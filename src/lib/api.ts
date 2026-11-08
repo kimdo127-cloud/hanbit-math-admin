@@ -2,7 +2,7 @@
 // POST {API}/api/admin/<함수 이름>  { args: [...] }  · 로그인 토큰은 Authorization 헤더로
 import type * as M from "./api.mock";
 export type * from "./api.mock";
-export { GRADE_LABEL, WEEKDAY, ROLE_LABEL, canSee, scheduleText, statusByTime, fmtRefundDue, REFUND_DAYS, ENROLL_CHANNELS, today } from "./api.mock";
+export { GRADE_LABEL, WEEKDAY, ROLE_LABEL, canSee, scheduleText, statusByTime, fmtRefundDue, REFUND_DAYS, ENROLL_CHANNELS, AREA_LABEL, today } from "./api.mock";
 
 export class ApiError extends Error {
   constructor(
@@ -131,3 +131,7 @@ export const sendParentInvite = rpc("sendParentInvite");
 export const setPrimaryContact = rpc("setPrimaryContact");
 export const addContactByStaff = rpc("addContactByStaff");
 export const removeContactByStaff = rpc("removeContactByStaff");
+export const kioskCheckOut = rpc("kioskCheckOut");
+export const setKioskCode = rpc("setKioskCode");
+export const sendUnpaidNotices = rpc("sendUnpaidNotices");
+export const draftLevelComment = rpc("draftLevelComment");

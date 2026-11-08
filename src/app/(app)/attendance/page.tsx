@@ -93,7 +93,7 @@ function AttendanceInner() {
     <>
       <PageHeader
         title="출결 확인"
-        desc="학생이 입구 키오스크에서 등원하면 시각과 출석·지각이 자동으로 채워져요. 강사는 등원 안 한 학생을 결석 처리하거나 잘못된 기록만 고쳐요. 지각 3번은 결석 1번으로 계산돼요."
+        desc="지각 3번은 결석 1번으로 계산돼요."
         right={
           <a href="/kiosk" target="_blank" className="flex h-10 items-center rounded-m border border-grey-200 bg-white px-4 text-[15px] font-semibold hover:bg-grey-50">
             등원 키오스크 열기 ↗
@@ -204,6 +204,7 @@ function AttendanceInner() {
                 ) : (
                   !sheet.future && <Badge>미등원</Badge>
                 )}
+                {r.leftAt && <span className="tabular text-[13px] text-grey-500">{r.leftAt} 하원</span>}
                 {r.status && (draft[r.student.id]?.status !== r.status || draft[r.student.id]?.checkedAt !== r.checkedAt) && <Badge tone="brand">바뀜</Badge>}
               </li>
             ))}

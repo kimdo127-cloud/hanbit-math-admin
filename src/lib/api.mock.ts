@@ -412,6 +412,7 @@ export interface StudentRow {
   attendance: AttendanceSummary;
   unpaid: number;
   level?: string | null; // 백엔드: 최근 레벨테스트 판정
+  appJoined?: boolean; // 백엔드: 학부모 앱 가입 여부
 }
 
 export async function listStudents(month = currentMonth()): Promise<StudentRow[]> {
@@ -481,7 +482,7 @@ export async function updateStudent(id: number, input: { name: string; grade: Gr
 }
 
 // 학생 등록 (목업은 형태만). 백엔드: 가족 단위 연락처 + 가입 전 가족이면 대표 번호로 초대 발급
-export async function createStudent(input: { name: string; grade: Grade; school: string; birth_date: string; guardians: { relation: string; phone: string }[] }): Promise<{ id: number; sibling: string | null; joined: boolean; invite: InviteIssued | null }> {
+export async function createStudent(input: { name: string; grade: Grade; school: string; birth_date: string; kioskCode: string; guardians: { relation: string; phone: string }[] }): Promise<{ id: number; sibling: string | null; joined: boolean; invite: InviteIssued | null }> {
   void input;
   throw new ApiError("서버에서만 동작해요.", 503);
 }
@@ -543,6 +544,7 @@ export interface SheetRow {
   status: AttendanceStatus | null;
   checkedAt: string | null;
   source: "kiosk" | "staff" | null;
+  leftAt: string | null; // 하원 시각
   offGrade: boolean;
 }
 
@@ -559,7 +561,7 @@ export async function getAttendanceSheet(classId: number, date: string) {
     .map((e) => {
       const s = db.students.find((x) => x.id === e.student_id)!;
       const a = db.attendances.find((x) => x.session_id === session.id && x.student_id === s.id);
-      return { student: s, status: a?.status ?? null, checkedAt: a?.checked_at ?? null, source: a?.source ?? null, offGrade: s.grade !== cls.target_grade };
+      return { student: s, status: a?.status ?? null, checkedAt: a?.checked_at ?? null, source: a?.source ?? null, leftAt: a?.left_at ?? null, offGrade: s.grade !== cls.target_grade };
     })
     .sort((a, b) => a.student.name.localeCompare(b.student.name));
   // 이 수업에 보강으로 들어오는 학생 (보강 → 결석 기록 → 학생)
@@ -602,7 +604,7 @@ export async function saveAttendance(sessionId: number, entries: { studentId: nu
       // 처음 입력은 이력에 남기지 않고, 이미 있던 출결을 바꿀 때만 남긴다
       addLog(db, me, studentId, "attendance", "update", `출결 수정 ${md(session.date)} ${cls.name}: ${label(a.status, a.checked_at)} → ${label(value.status, value.checked_at)}`);
       Object.assign(a, value);
-    } else db.attendances.push({ id: nextId(db.attendances), session_id: sessionId, student_id: studentId, ...value });
+    } else db.attendances.push({ id: nextId(db.attendances), session_id: sessionId, student_id: studentId, ...value, left_at: null });
   }
   saveDB(db);
 }
@@ -854,62 +856,32 @@ export async function markRefunded(enrollmentId: number, amount: number, date: s
 
 /* ---------- 대시보드 ---------- */
 
-export async function getDashboard() {
-  await wait();
-  const me = requireStaff();
-  const db = loadDB();
-  const month = currentMonth();
-  const wd = new Date(TODAY + "T00:00").getDay();
-  const todayClasses = db.class_schedules
-    .filter((s) => s.weekday === wd)
-    .map((s) => ({ s, c: db.classes.find((c) => c.id === s.class_id)! }))
-    .filter(({ c }) => visible(me, c))
-    .sort((a, b) => a.s.start_time.localeCompare(b.s.start_time))
-    .map(({ s, c }) => {
-      const sess = db.class_sessions.find((x) => x.class_id === c.id && x.date === TODAY);
-      const atts = sess ? db.attendances.filter((a) => a.session_id === sess.id) : [];
-      const expected = sess ? db.enrollments.filter((e) => e.class_id === c.id && e.start_date <= TODAY && (e.end_date === null || e.end_date > TODAY)).length : 0;
-      const makeupIn = sess ? db.makeups.filter((m) => m.session_id === sess.id).length : 0;
-      return {
-        classId: c.id,
-        name: c.name,
-        time: `${s.start_time}~${s.end_time}`,
-        teacher: db.staff.find((t) => t.id === c.teacher_id)?.name ?? "",
-        topic: sess?.topic ?? null,
-        expected,
-        makeupIn,
-        arrived: atts.filter((a) => a.status !== "absent").length,
-        absent: atts.filter((a) => a.status === "absent").length,
-        late: atts.filter((a) => a.status === "late").length,
-        done: atts.length > 0,
-        start: s.start_time,
-        missing: Math.max(0, expected - atts.filter((a) => db.enrollments.some((e) => e.student_id === a.student_id && e.class_id === c.id)).length),
-      };
-    });
-  const unpaid = db.students.flatMap((s) => paymentRows(db, s, month).filter((p) => p.status === "unpaid"));
-  const refundsDue = db.enrollments
-    .filter((e) => e.end_date && !e.refunded_at)
-    .map((e) => {
-      const due = addDays(e.end_date!, REFUND_DAYS);
-      return { enrollmentId: e.id, name: db.students.find((s) => s.id === e.student_id)!.name, className: db.classes.find((c) => c.id === e.class_id)!.name, due, dLeft: daysBetween(TODAY, due), amount: refundCalc(db, { ...e, end_date: e.end_date! }).amount };
-    })
-    .sort((a, b) => a.due.localeCompare(b.due));
-  const makeupsUpcoming = db.makeups
-    .map((m) => ({ m, s: db.class_sessions.find((x) => x.id === m.session_id)! }))
-    .filter(({ s }) => s.date > TODAY && s.date <= addDays(TODAY, 7)).length;
-  const nearFull = db.classes
-    .map((c) => ({ name: c.name, left: c.capacity - activeCount(db, c.id) }))
-    .filter((c) => c.left <= 1)
-    .sort((a, b) => a.left - b.left);
-  // 멤버(강사)는 담당 강좌 수업만 보고, 수납·환불은 보지 않는다
-  const member = me.role === "member";
-  return { me: pub(me), month, today: TODAY, todayClasses, unpaid: member ? [] : unpaid, refundsDue: member ? [] : refundsDue, makeupsUpcoming, nearFull, member };
+// 대시보드 · 키오스크 (목업 없음, 타입만). 규칙은 백엔드 logic/admin-api.ts
+export interface DashboardTask {
+  key: string;
+  label: string;
+  detail: string;
+  href: string;
+  urgent: boolean;
 }
-
-/* ---------- 등원 키오스크 (입구 태블릿, 학생이 직접) ----------
- * 보호자 연락처 뒷자리 4자리 → 오늘 수업이 있는 학생 → 이름 눌러 등원
- * 등원 시각은 누른 시각, 강좌 시작보다 늦으면 자동 지각. 보호자에게 등원 알림(목업에서는 표시만)
- */
+export interface DashboardClass {
+  classId: number;
+  name: string;
+  time: string;
+  teacher: string;
+  topic: string | null;
+  expected: number;
+  makeupIn: number;
+  arrived: number;
+  absent: number;
+  late: number;
+  done: boolean;
+  start: string;
+  missing: number;
+}
+export async function getDashboard(): Promise<{ me: StaffPublic; month: string; today: string; todayClasses: DashboardClass[]; tasks: DashboardTask[]; kpis: { label: string; value: string; sub: string; href: string }[]; member: boolean }> {
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
 export interface KioskCandidate {
   studentId: number;
   name: string;
@@ -917,61 +889,35 @@ export interface KioskCandidate {
   sessionId: number;
   className: string;
   start: string;
-  checkedAt: string | null; // 이미 등원했으면 시각
-  makeup: boolean; // 보강으로 오는 수업
+  checkedAt: string | null;
+  leftAt: string | null;
+  makeup: boolean;
+}
+export type KioskDone = { name: string; time: string; status: AttendanceStatus; late: number; className: string; kind: "in" | "out" };
+export async function kioskLookup(code: string): Promise<KioskCandidate[]> {
+  void code;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function kioskCheckIn(studentId: number, sessionId: number): Promise<KioskDone> {
+  void studentId;
+  void sessionId;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function kioskCheckOut(studentId: number, sessionId: number): Promise<KioskDone> {
+  void studentId;
+  void sessionId;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function setKioskCode(studentId: number, code: string): Promise<void> {
+  void studentId;
+  void code;
+  throw new ApiError("서버에서만 동작해요.", 503);
+}
+export async function sendUnpaidNotices(month: string): Promise<{ families: number }> {
+  void month;
+  throw new ApiError("서버에서만 동작해요.", 503);
 }
 
-function todaySessionsFor(db: DB, studentId: number) {
-  const regular = db.enrollments
-    .filter((e) => e.student_id === studentId && e.start_date <= TODAY && (e.end_date === null || e.end_date > TODAY))
-    .map((e) => db.class_sessions.find((x) => x.class_id === e.class_id && x.date === TODAY))
-    .filter((x): x is NonNullable<typeof x> => !!x)
-    .map((x) => ({ x, makeup: false }));
-  const makeups = db.makeups
-    .filter((m) => db.attendances.find((a) => a.id === m.absence_id)?.student_id === studentId)
-    .map((m) => db.class_sessions.find((x) => x.id === m.session_id)!)
-    .filter((x) => x.date === TODAY)
-    .map((x) => ({ x, makeup: true }));
-  return [...regular, ...makeups];
-}
-
-export async function kioskLookup(last4: string): Promise<KioskCandidate[]> {
-  await wait();
-  requireStaff(); // 키오스크 태블릿은 직원 계정으로 로그인해 둔다
-  if (!/^\d{4}$/.test(last4)) throw new ApiError("번호 4자리를 눌러 주세요.");
-  const db = loadDB();
-  const families = new Set(db.family_contacts.filter((c) => c.phone.replace(/\D/g, "").endsWith(last4)).map((c) => c.family_id));
-  const ids = db.students.filter((x) => families.has(x.family_id)).map((x) => x.id);
-  return ids.flatMap((id) => {
-    const st = db.students.find((x) => x.id === id)!;
-    return todaySessionsFor(db, id).map(({ x, makeup }) => {
-      const a = db.attendances.find((y) => y.session_id === x.id && y.student_id === id);
-      return { studentId: id, name: st.name, grade: st.grade, sessionId: x.id, className: db.classes.find((c) => c.id === x.class_id)!.name, start: sessionStart(db, x), checkedAt: a?.checked_at ?? null, makeup };
-    });
-  });
-}
-
-export async function kioskCheckIn(studentId: number, sessionId: number) {
-  await wait();
-  requireStaff();
-  const db = loadDB();
-  const sess = db.class_sessions.find((x) => x.id === sessionId);
-  if (!sess || sess.date !== TODAY) throw new ApiError("오늘 수업이 아니에요.");
-  const a = db.attendances.find((y) => y.session_id === sessionId && y.student_id === studentId);
-  if (a?.checked_at) throw new ApiError(`이미 ${a.checked_at}에 등원했어요.`, 409);
-  const now = new Date().toTimeString().slice(0, 5);
-  const status = statusByTime(sessionStart(db, sess), now);
-  if (a) Object.assign(a, { status, checked_at: now, source: "kiosk" as const });
-  else db.attendances.push({ id: nextId(db.attendances), session_id: sessionId, student_id: studentId, status, checked_at: now, source: "kiosk" });
-  saveDB(db);
-  const st = db.students.find((x) => x.id === studentId)!;
-  return { name: st.name, time: now, status, late: status === "late" ? toMin(now) - toMin(sessionStart(db, sess)) : 0, className: db.classes.find((c) => c.id === sess.class_id)!.name };
-}
-
-/* ---------- 수강 등록 (운영이 대신) ----------
- * 고객 앱 수강 신청과 같은 규칙(정원, 이미 수강 중이면 거절). 단 학년이 달라도 등록 가능 (선행·복습은 상담·레벨 테스트 후 학원만),
- * 시작일은 그 강좌의 다음 수업일(시스템이 정함). 접수 경로를 함께 남긴다
- */
 export const ENROLL_CHANNELS = ["상담 후 배정", "전화 요청", "방문 요청", "기타"] as const;
 export type EnrollChannel = (typeof ENROLL_CHANNELS)[number];
 
@@ -1024,6 +970,12 @@ export interface LevelScoreInput {
   type: number;
   advanced: number;
   memo?: string;
+  areas?: { number: number | null; change: number | null; shape: number | null; data: number | null };
+}
+export const AREA_LABEL = { number: "수와 연산", change: "변화와 관계", shape: "도형과 측정", data: "자료와 가능성" } as const;
+export async function draftLevelComment(input: LevelScoreInput & { kind: LevelTestKind; studentId: number }): Promise<{ text: string; by: "ai" | "rule" }> {
+  void input;
+  throw new ApiError("서버에서만 동작해요.", 503);
 }
 export interface LevelSheetRow {
   student: Student;
@@ -1042,7 +994,7 @@ export async function deleteLevelTest(testId: number): Promise<void> {
   void testId;
   return serverOnly();
 }
-export async function getLevelTestSheet(classId: number, testedOn: string): Promise<{ cls: { id: number; name: string; level: string }; testedOn: string; rows: LevelSheetRow[] }> {
+export async function getLevelTestSheet(classId: number, testedOn: string): Promise<{ cls: { id: number; name: string; level: string; target_grade: number }; testedOn: string; rows: LevelSheetRow[] }> {
   void classId;
   void testedOn;
   return serverOnly();

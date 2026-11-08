@@ -10,13 +10,18 @@ import type { Grade } from "@/lib/types";
 import { inviteMessage } from "@/lib/invite-text";
 
 const RELATIONS = ["엄마", "아빠", "할머니", "할아버지", "보호자"];
-const emptyForm = () => ({ name: "", grade: 7 as Grade, school: "", birth_date: "", guardians: [{ relation: "엄마", phone: "" }] });
+const emptyForm = () => ({ name: "", grade: 7 as Grade, school: "", birth_date: "", kioskCode: "", guardians: [{ relation: "엄마", phone: "" }] });
 
 export default function StudentsPage() {
   const router = useRouter();
   const [rows, setRows] = useState<StudentRow[] | null>(null);
   const [q, setQ] = useState("");
-  const [only, setOnly] = useState<"all" | "makeup" | "unpaid" | "new" | "ended">("all");
+  const [only, setOnly] = useState<"all" | "makeup" | "unpaid" | "new" | "ended" | "invite">("all");
+  // 대시보드 '앱 초대 필요'에서 들어오면 그 목록부터
+  useEffect(() => {
+    const o = new URLSearchParams(window.location.search).get("only");
+    if (o === "invite") setOnly("invite");
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -53,14 +58,14 @@ export default function StudentsPage() {
   const shown = rows.filter(
     (r) =>
       (r.student.name.includes(q.trim()) || r.classes.some((c) => c.includes(q.trim()))) &&
-      (only === "all" ? r.active : only === "new" ? !r.enrolledBefore : only === "ended" ? !r.active && r.enrolledBefore : (only === "makeup" && r.attendance.needsMakeup) || (only === "unpaid" && r.unpaid > 0)),
+      (only === "all" ? r.active : only === "invite" ? !r.appJoined && (r.active || !r.enrolledBefore) : only === "new" ? !r.enrolledBefore : only === "ended" ? !r.active && r.enrolledBefore : (only === "makeup" && r.attendance.needsMakeup) || (only === "unpaid" && r.unpaid > 0)),
   );
 
   return (
     <>
       <PageHeader
         title="학생"
-        desc="이번 달 출석률은 지각 3번을 결석 1번으로 계산해요. 출석·지각·결석은 이번 달 횟수예요."
+        desc="출석률은 지각 3번을 결석 1번으로 계산해요."
         right={
           <Button
             size="m"
@@ -91,6 +96,9 @@ export default function StudentsPage() {
         </Chip>
         <Chip active={only === "ended"} onClick={() => setOnly("ended")}>
           수강 중단 {rows.filter((r) => !r.active && r.enrolledBefore).length}
+        </Chip>
+        <Chip active={only === "invite"} onClick={() => setOnly("invite")}>
+          앱 가입 전 {rows.filter((r) => !r.appJoined && (r.active || !r.enrolledBefore)).length}
         </Chip>
       </div>
       <Table head={["이름", "학년", "레벨", "다니는 강좌", "이번 달 출석률", "출석·지각·결석", "보강", "미납"]} empty="찾는 학생이 없어요.">
@@ -138,8 +146,16 @@ export default function StudentsPage() {
             <TextField label="학교" className="flex-1" value={form.school} onChange={(e) => setForm({ ...form, school: e.target.value })} />
             <TextField label="생년월일" type="date" className="w-44" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
           </div>
+          <TextField
+            label="출석 번호 (학생이 정한 4자리)"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="0000"
+            value={form.kioskCode}
+            onChange={(e) => setForm({ ...form, kioskCode: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+          />
           <p className="pt-2 text-[13px] font-semibold text-grey-700">
-            보호자 연락처 <span className="font-normal text-grey-500">· 첫 번호가 대표 번호(초대 문자를 받는 번호). 형제가 이미 등록돼 있으면 같은 가족으로 묶여요</span>
+            보호자 연락처 <span className="font-normal text-grey-500">· 첫 번호가 대표 번호</span>
           </p>
           {form.guardians.map((g, i) => (
             <div key={i} className="flex items-end gap-2">
@@ -167,7 +183,7 @@ export default function StudentsPage() {
           <Button variant="secondary" className="flex-1" onClick={() => setOpen(false)}>
             취소
           </Button>
-          <Button className="flex-1" disabled={busy || !form.name.trim() || !form.school.trim() || !form.birth_date || !form.guardians[0].phone.trim()} onClick={save}>
+          <Button className="flex-1" disabled={busy || !form.name.trim() || !form.school.trim() || !form.birth_date || form.kioskCode.length !== 4 || !form.guardians[0].phone.trim()} onClick={save}>
             {busy ? "등록 중…" : "등록"}
           </Button>
         </div>

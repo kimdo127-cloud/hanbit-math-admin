@@ -90,7 +90,6 @@ export default function StaffPage() {
     <>
       <PageHeader
         title="직원 계정"
-        desc="직원은 회원가입이 없어요. 관리자가 등록하면 초대 메일이 가고, 직원이 링크에서 직접 비밀번호를 정해요. 관리자는 비밀번호를 볼 수 없어요."
         right={
           <Button
             size="m"

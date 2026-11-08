@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Crumbs, Dialog, EditBar, Loader, Modal, Select, Table, Td, TextField, Toast, fmtDate, won } from "@/components/ui";
 import { EnrollModal } from "@/components/enroll-modal";
-import { addContactByStaff, addLevelTest, ApiError, deleteLevelTest, removeContactByStaff, sendParentInvite, setPrimaryContact, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
+import { addContactByStaff, addLevelTest, AREA_LABEL, ApiError, deleteLevelTest, draftLevelComment, setKioskCode, removeContactByStaff, sendParentInvite, setPrimaryContact, endEnrollment, getStudentDetail, GRADE_LABEL, listMakeups, today, updateStudent, type MakeupRow } from "@/lib/api";
 import { ADVANCE_PASS, judgeLevel, LEVEL_MAX } from "@/lib/level";
 import { inviteMessage } from "@/lib/invite-text";
 import { shiftMonth } from "@/lib/calc";
@@ -25,8 +25,17 @@ const INVITE_STATE: Record<string, { label: string; tone: "brand" | "success" | 
 };
 const RELATIONS = ["엄마", "아빠", "할머니", "할아버지", "보호자"];
 const at = (v: string) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))} ${v.slice(11, 16)}`;
+// 가장 낮은 분야 (분야 점수가 있는 중등 시험만)
+const weakArea = (t: { area_number: number | null; area_change: number | null; area_shape: number | null; area_data: number | null }) => {
+  const xs = AREA_KEYS.map((k) => [AREA_LABEL[k], t[AREA_COL[k]]] as const).filter((x): x is readonly [(typeof AREA_LABEL)[AreaKey], number] => x[1] !== null);
+  return xs.length ? [...xs].sort((a, b) => a[1] - b[1])[0][0] : null;
+};
 const LEVEL_TONE: Record<string, "grey" | "brand" | "success"> = { 기본: "grey", 심화: "brand", 최상위: "success" };
-type TestForm = { kind: LevelTestKind; testedOn: string; concept: string; type: string; advanced: string; memo: string };
+type AreaKey = keyof typeof AREA_LABEL;
+type TestForm = { kind: LevelTestKind; testedOn: string; concept: string; type: string; advanced: string; memo: string; areas: Record<AreaKey, string> };
+const emptyAreas = (): Record<AreaKey, string> => ({ number: "", change: "", shape: "", data: "" });
+const AREA_KEYS = Object.keys(AREA_LABEL) as AreaKey[];
+const AREA_COL: Record<AreaKey, "area_number" | "area_change" | "area_shape" | "area_data"> = { number: "area_number", change: "area_change", shape: "area_shape", data: "area_data" };
 const MK_STATE: Record<MakeupRow["state"], { label: string; tone: "brand" | "success" | "warning" | "grey" }> = {
   available: { label: "신청 전", tone: "warning" },
   booked: { label: "보강 예정", tone: "brand" },
@@ -57,6 +66,8 @@ export default function StudentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [testForm, setTestForm] = useState<TestForm | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [codeEdit, setCodeEdit] = useState<string | null>(null);
   const [delTest, setDelTest] = useState<number | null>(null);
   const [inviteText, setInviteText] = useState<string | null>(null);
   const [newContact, setNewContact] = useState<{ relation: string; phone: string } | null>(null);
@@ -108,9 +119,34 @@ export default function StudentDetailPage() {
   const saveTest = async () => {
     if (!testForm) return;
     try {
-      await addLevelTest(id, { kind: testForm.kind, testedOn: testForm.testedOn, concept: num(testForm.concept), type: num(testForm.type), advanced: num(testForm.advanced), memo: testForm.memo });
+      await addLevelTest(id, { kind: testForm.kind, testedOn: testForm.testedOn, concept: num(testForm.concept), type: num(testForm.type), advanced: num(testForm.advanced), memo: testForm.memo, areas: areaInput(testForm) });
       setTestForm(null);
       setToast("레벨테스트 결과를 저장했어요");
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    }
+  };
+  // 분야 정답률: 비운 칸은 null (중등 시험만 입력)
+  const areaInput = (f: TestForm) => Object.fromEntries(AREA_KEYS.map((k) => [k, f.areas[k].trim() === "" ? null : Number(f.areas[k])])) as Record<AreaKey, number | null>;
+  const draft = async () => {
+    if (!testForm || !preview) return;
+    setDrafting(true);
+    try {
+      const r = await draftLevelComment({ studentId: id, kind: testForm.kind, concept: num(testForm.concept), type: num(testForm.type), advanced: num(testForm.advanced), areas: areaInput(testForm) });
+      setTestForm((f) => (f ? { ...f, memo: r.text } : f));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
+    } finally {
+      setDrafting(false);
+    }
+  };
+  const saveCode = async () => {
+    if (codeEdit === null) return;
+    try {
+      await setKioskCode(id, codeEdit);
+      setCodeEdit(null);
+      setToast("출석 번호를 바꿨어요");
       load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해 주세요.");
@@ -224,6 +260,27 @@ export default function StudentDetailPage() {
                 <Row k="학년" v={GRADE_LABEL[s.grade]} />
                 <Row k="학교" v={s.school} />
                 <Row k="생년월일" v={s.birth_date.replaceAll("-", ". ")} />
+                <div className="flex items-center border-b border-grey-100 py-3 text-[15px] last:border-0">
+                  <span className="w-32 shrink-0 text-grey-500">출석 번호</span>
+                  {codeEdit === null ? (
+                    <>
+                      <span className="tabular flex-1 font-semibold">{s.kiosk_code}</span>
+                      <Button size="s" variant="ghost" onClick={() => setCodeEdit(s.kiosk_code)}>
+                        변경
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="flex flex-1 items-center gap-2">
+                      <TextField className="w-28" inputMode="numeric" maxLength={4} value={codeEdit} onChange={(e) => setCodeEdit(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+                      <Button size="s" variant="secondary" onClick={() => setCodeEdit(null)}>
+                        취소
+                      </Button>
+                      <Button size="s" disabled={codeEdit.length !== 4} onClick={saveCode}>
+                        저장
+                      </Button>
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </section>
@@ -301,7 +358,6 @@ export default function StudentDetailPage() {
                 )
               }
             />
-            <p className="mt-3 text-[12px] text-grey-500">연락처는 가족 단위로 저장돼 형제 모두에게 같이 적용돼요. 가입 후에는 보호자도 앱에서 대표가 아닌 번호를 관리할 수 있어요.</p>
           </section>
         </div>
       )}
@@ -309,7 +365,7 @@ export default function StudentDetailPage() {
       {tab === "수강" && (
         <>
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[14px] text-grey-500">보호자가 앱에서 직접 신청하거나, 상담·전화·방문 요청이면 여기서 운영이 등록해요.</p>
+          <span />
           <Button size="m" onClick={() => setAdding(true)}>
             수강 등록
           </Button>
@@ -397,14 +453,14 @@ export default function StudentDetailPage() {
         <>
           <div className="mb-4 flex items-center justify-between">
             <p className="text-[14px] text-grey-500">
-              정기 테스트는 2월·8월 셋째 토요일 (반 편성용) · 입학·선행 테스트는 수시 · 판정: 70점 미만 또는 개념 24점 미만 기본, 90점 이상·심화 15점 이상 최상위, 그 사이 심화
+              판정: 70점 미만 또는 개념 24점 미만 기본 · 90점 이상·심화 15점 이상 최상위 · 그 사이 심화
               {d.canAdvance && <b className="ml-2 text-brand">선행 상담 대상</b>}
             </p>
-            <Button size="s" onClick={() => setTestForm({ kind: "entry", testedOn: today(), concept: "", type: "", advanced: "", memo: "" })}>
+            <Button size="s" onClick={() => setTestForm({ kind: "entry", testedOn: today(), concept: "", type: "", advanced: "", memo: "", areas: emptyAreas() })}>
               결과 입력
             </Button>
           </div>
-          <Table head={["날짜", "종류", "시험지", "개념", "유형", "심화", "총점", "판정", "입력", "메모", ""]} empty="레벨테스트 기록이 없어요.">
+          <Table head={["날짜", "종류", "시험지", "개념", "유형", "심화", "총점", "판정", "약한 분야", "입력", "강사 코멘트", ""]} empty="레벨테스트 기록이 없어요.">
             {d.levelTests.map((t) => (
               <tr key={t.id}>
                 <Td className="tabular text-grey-700">{fmtDate(t.tested_on)}</Td>
@@ -415,6 +471,7 @@ export default function StudentDetailPage() {
                 <Td className="tabular">{t.advanced_score}</Td>
                 <Td className="tabular font-semibold">{t.total_score}</Td>
                 <Td>{t.kind === "advance" ? <Badge tone={t.advance_ok ? "success" : "grey"}>{t.advance_ok ? "선행 통과" : "선행 미통과"}</Badge> : <Badge tone={LEVEL_TONE[t.result_level]}>{t.result_level}</Badge>}</Td>
+                <Td className="text-grey-700">{weakArea(t) ?? "-"}</Td>
                 <Td className="text-grey-500">{t.staffName}</Td>
                 <Td className="max-w-56 truncate text-grey-700">{t.memo || "-"}</Td>
                 <Td>
@@ -512,7 +569,25 @@ export default function StudentDetailPage() {
                 <TextField key={k} label={`${label} (0~${max})`} type="number" min={0} max={max} value={testForm[k]} onChange={(e) => setTestForm({ ...testForm, [k]: e.target.value })} />
               ))}
             </div>
-            <TextField label="메모 (강사 코멘트, 학부모에게는 보이지 않음)" value={testForm.memo} onChange={(e) => setTestForm({ ...testForm, memo: e.target.value })} />
+            {(testForm.kind === "advance" ? s.grade + 1 : s.grade) <= 9 && (
+              <div>
+                <p className="mb-2 text-[13px] font-semibold text-grey-700">분야별 정답률 (%)</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {AREA_KEYS.map((k) => (
+                    <TextField key={k} label={AREA_LABEL[k]} type="number" min={0} max={100} value={testForm.areas[k]} onChange={(e) => setTestForm({ ...testForm, areas: { ...testForm.areas, [k]: e.target.value } })} />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-grey-700">강사 코멘트 · 학부모 앱에 보여요</span>
+                <Button size="s" variant="secondary" disabled={!preview || drafting} onClick={draft}>
+                  {drafting ? "만드는 중…" : "AI 초안"}
+                </Button>
+              </div>
+              <TextField value={testForm.memo} onChange={(e) => setTestForm({ ...testForm, memo: e.target.value })} placeholder="점수를 넣고 AI 초안을 누르면 초안을 만들어 줘요" />
+            </div>
             <p className="rounded-m bg-grey-50 px-4 py-3 text-[14px] text-grey-700">
               {preview
                 ? testForm.kind === "advance"

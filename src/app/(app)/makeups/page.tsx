@@ -69,7 +69,6 @@ export default function MakeupsPage() {
     <>
       <PageHeader
         title="보강"
-        desc="결석 1건마다 보강 1회. 고객이 앱에서 결석한 달 안, 같은 학년 다른 강좌 수업 중 자리 있는 날을 직접 신청해요. 전화로 요청하면 여기서 대신 신청할 수 있어요."
         right={
           <div className="rounded-m bg-white px-2 py-1">
             <MonthNav month={month} onChange={(d) => setMonth(shiftMonth(month, d))} />
@@ -136,7 +135,6 @@ export default function MakeupsPage() {
               </tr>
             ))}
           </Table>
-          <p className="mt-3 text-[12px] text-grey-500">남은 수업 없음: 신청 기간 안에 같은 학년 다른 강좌 수업이 더 없거나 모두 찼어요.</p>
         </>
       )}
 
