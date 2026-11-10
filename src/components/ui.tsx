@@ -323,7 +323,7 @@ export function Crumbs({ items = [] }: { items?: { label: string; href?: string 
           <span key={i} className="flex items-center gap-1.5">
             {i > 0 && <span className="text-grey-400">›</span>}
             {last ? (
-              <span className="font-semibold text-grey-900" aria-current="page">
+              <span className="font-semibold text-grey-700" aria-current="page">
                 {it.label}
               </span>
             ) : it.href ? (
