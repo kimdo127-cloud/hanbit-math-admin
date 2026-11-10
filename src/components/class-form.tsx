@@ -151,7 +151,7 @@ export function ClassForm({ id }: { id: number | null }) {
           </div>
         </Section>
 
-        <Section title="강좌 소개" desc="고객 앱 '수강 신청 › 강좌 상세'에 그대로 보여요.">
+        <Section title="강좌 소개" desc="학부모 웹앱 '수강 신청 › 강좌 상세'에 그대로 보여요.">
           <div className="grid grid-cols-2 gap-3">
             <Select label="수준 (레벨테스트 판정과 같은 값)" value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value as ClassLevel })}>
               <option value="기본">기본</option>
@@ -166,7 +166,7 @@ export function ClassForm({ id }: { id: number | null }) {
           </label>
         </Section>
 
-        <Section title="진도 계획" desc="한 줄에 1회차씩 적으면 앞으로의 수업일에 순서대로 들어가요. 고객 앱 홈·캘린더·강좌 상세와 출결 확인 화면에 보여요.">
+        <Section title="진도 계획" desc="한 줄에 1회차씩 적으면 앞으로의 수업일에 순서대로 들어가요. 학부모 웹앱 홈·캘린더·강좌 상세와 출결 확인 화면에 보여요.">
           <textarea rows={10} value={form.plan.join("\n")} onChange={(e) => setForm({ ...form, plan: e.target.value.split("\n") })} placeholder={"일차함수와 그래프\n일차함수의 기울기\n..."} className={area} />
           <p className="text-[12px] text-grey-500">{form.plan.filter((p) => p.trim()).length}회차 입력됨</p>
         </Section>
