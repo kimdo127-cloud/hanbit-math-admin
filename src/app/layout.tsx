@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { WarmUp } from "@/components/warm-up";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "한빛수학 운영",
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <WarmUp />
         {children}
+        <Analytics />
       </body>
     </html>
   );
